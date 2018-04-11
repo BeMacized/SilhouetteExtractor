@@ -43,7 +43,7 @@ cv::Mat extractSilhouette(cv::Mat back, cv::Mat front, double scale, int resolut
     // Initialize cv::Matte, BG subtractor & Contour list
     cv::Mat matte;
     std::vector<std::vector<cv::Point>> contours;
-    cv::Ptr<cv::BackgroundSubtractor> bg = cv::createBackgroundSubtractorMOG2(0, 512, false);
+    cv::Ptr<cv::BackgroundSubtractor> bg = cv::createBackgroundSubtractorMOG2(0, threshold, false);
 
     // Subtract BG and write diff to matte
     bg->apply(back, matte);
