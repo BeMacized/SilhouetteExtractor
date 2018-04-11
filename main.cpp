@@ -68,7 +68,6 @@ cv::Mat extractSilhouette(cv::Mat back, cv::Mat front, double scale, int resolut
 
     // Draw matte to canvas at its relative scale
     int oRes = static_cast<int>(std::round(1. / scale * static_cast<double>(matte.rows)));
-    std::cout << matte.rows << " " << scale << " " << oRes << std::endl;
     cv::Mat canvas(oRes, oRes, matte.type(), cv::Scalar(255, 255, 255));
     int x = (oRes - matte.cols) / 2;
     int y = oRes - matte.rows;
