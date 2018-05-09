@@ -10,7 +10,9 @@ const int INVALID_SCALE = 3;
 cv::Mat extractSilhouette(cv::Mat back, cv::Mat front, double scale, int resolution, double threshold = 512) {
 
     // Validate scale
-    if (scale <= 0 || scale > 1) throw INVALID_SCALE;
+    if (scale <= 0 || scale > 1) {
+        throw INVALID_SCALE;
+    }
 
     // Resize images for processing
     float resizeFactor = 1024.f / std::max(front.rows, front.cols);
@@ -80,26 +82,31 @@ cv::Mat extractSilhouette(cv::Mat back, cv::Mat front, double scale, int resolut
 }
 
 int main(int argc, char **argv) {
+    // <BG_FP> <FG_FP> <OUT_FP> <HEIGHT> <MAX_HEIGHT> <RES> <THRESHOLD>
 
     // Read front and back images
-    cv::Mat back = cv::imread("../images/bg3.jpg");
-    cv::Mat front = cv::imread("../images/fg3.jpg");
+    cv::Mat back = cv::imread(argv[1]);
+    cv::Mat front = cv::imread(argv[2]);
+
+    // Parse input values
+    int height = atoi(argv[4]);
+    int maxHeight = atoi(argv[5]);
+    int resolution = atoi(argv[6]);
+    int threshold = atoi(argv[7]);
+    if (threshold <= 0) threshold = 512;
+    double scale = static_cast<double>(height) / static_cast<double>(maxHeight);
 
     // Extract silhouette
     cv::Mat silhouette;
     try {
-        silhouette = extractSilhouette(back, front, 1780. / 2183., 512);
+        silhouette = extractSilhouette(back, front, scale, resolution, threshold);
     } catch (int errCode) {
+        std::cerr << "An error occurred: ERR CODE " << errCode << std::endl;
         return errCode;
     }
 
     // Save image
-    cv::imwrite("../images/out.jpg", silhouette);
-
-    // Show silhouette and wait
-    cv::namedWindow("Image");
-    cv::imshow("Image", silhouette);
-    cv::waitKey(0);
+    cv::imwrite(argv[3], silhouette);
 
     return 0;
 }
