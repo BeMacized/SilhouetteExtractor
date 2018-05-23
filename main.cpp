@@ -16,8 +16,8 @@ cv::Mat extractSilhouette(cv::Mat back, cv::Mat front, double scale, int resolut
 
     // Resize images for processing
     float resizeFactor = 1024.f / std::max(front.rows, front.cols);
-    resize(front, front, cv::Size(), resizeFactor, resizeFactor, cv::INTER_CUBIC);
-    resize(back, back, cv::Size(), resizeFactor, resizeFactor, cv::INTER_CUBIC);
+    cv::resize(front, front, cv::Size(), resizeFactor, resizeFactor, cv::INTER_CUBIC);
+    cv::resize(back, back, cv::Size(), resizeFactor, resizeFactor, cv::INTER_CUBIC);
 
     // Initialise person detector
     cv::HOGDescriptor hog;
@@ -61,6 +61,9 @@ cv::Mat extractSilhouette(cv::Mat back, cv::Mat front, double scale, int resolut
     cv::Mat boundingPoints;
     findNonZero(matte, boundingPoints);
     matte = cv::Mat(matte, boundingRect(boundingPoints));
+    if (matte.cols == 0 && matte.rows == 0) {
+        matte = cv::Mat(1, 1, matte.type(), cv::Scalar(0,0,0));
+    }
 
     // Validate orientation
     if (matte.cols > matte.rows) throw NOT_VERTICAL;
