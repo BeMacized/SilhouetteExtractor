@@ -7,109 +7,171 @@ const int NO_PERSON_DETECTED = 1;
 const int NOT_VERTICAL = 2;
 const int INVALID_SCALE = 3;
 
-cv::Mat extractSilhouette(cv::Mat back, cv::Mat front, double scale, int resolution, double threshold = 512) {
+void debug(std::string msg) {
+    std::cout << "[DEBUG] " << msg << std::endl;
+}
 
+void info(std::string msg) {
+    std::cout << "[INFO] " << msg << std::endl;
+}
+
+void error(std::string msg) {
+    std::cerr << "[ERR] " << msg << std::endl;
+}
+
+cv::Mat extractSilhouette(cv::Mat img, cv::Mat mask, double scale, int resolution) {
+    cv::namedWindow("Image", CV_WINDOW_AUTOSIZE);
     // Validate scale
     if (scale <= 0 || scale > 1) {
         throw INVALID_SCALE;
     }
 
     // Resize images for processing
-    float resizeFactor = 1024.f / std::max(front.rows, front.cols);
-    cv::resize(front, front, cv::Size(), resizeFactor, resizeFactor, cv::INTER_CUBIC);
-    cv::resize(back, back, cv::Size(), resizeFactor, resizeFactor, cv::INTER_CUBIC);
+    debug("Resizing input image");
+    float resizeFactor = 1024.f / std::max(img.rows, img.cols);
+    cv::resize(img, img, cv::Size(), resizeFactor, resizeFactor, cv::INTER_CUBIC);
+    cv::resize(mask, mask, cv::Size(), resizeFactor, resizeFactor, cv::INTER_CUBIC);
+    info("Resized input image");
 
     // Initialise person detector
+    debug("Detecting people in source image");
     cv::HOGDescriptor hog;
     hog.setSVMDetector(cv::HOGDescriptor::getDefaultPeopleDetector());
 
     // Detect people in the front image
-    std::vector<cv::Rect> rects;
+    std::vector<cv::Rect> humanBounds;
     std::vector<double> weights;
-    hog.detectMultiScale(front, rects, weights, 0, cv::Size(4, 4), cv::Size(32, 32), 1.05);
+    hog.detectMultiScale(img, humanBounds, weights, 0, cv::Size(4, 4), cv::Size(8, 8), 1.05);
 
     // Quit if none detected
-    if (rects.size() == 0) throw NO_PERSON_DETECTED;
+    if (humanBounds.size() == 0) {
+        error("No person detected");
+        throw NO_PERSON_DETECTED;
+    }
+    info("Detected person in image");
 
     // Non-maxima suppression for merging detections
+    debug("Applying non-maxima suppression to detected bounds");
     std::vector<std::vector<float>> procRects;
-    for (cv::Rect rect : rects) {
-        procRects.push_back({rect.x, rect.y, rect.x + rect.width, rect.y + rect.height});
+    for (cv::Rect bound : humanBounds) {
+        procRects.push_back({bound.x, bound.y, bound.x + bound.width, bound.y + bound.height});
     }
-    rects = nms(procRects, 0.65);
+    humanBounds = nms(procRects, 0.65);
+    info("Applied non-maxima suppression to detected bounds");
 
-    // Crop images to first detection
-    front = cv::Mat(front, rects.front());
-    back = cv::Mat(back, rects.front());
+    // Extract foreground
+    {
+        debug("Extracting foreground");
+        // Threshold mask
+        cv::threshold(mask, mask, 128, 255, cv::THRESH_BINARY);
+        mask.setTo(cv::GC_BGD, mask == 0);
+        mask.setTo(cv::GC_PR_FGD, mask == 255);
 
-    // Initialize cv::Matte, BG subtractor & Contour list
-    cv::Mat matte;
-    std::vector<std::vector<cv::Point>> contours;
-    cv::Ptr<cv::BackgroundSubtractor> bg = cv::createBackgroundSubtractorMOG2(0, threshold, false);
+        // Execute grabcut
+        cv::Mat bgModel, fgModel;
+//        cv::Rect bounds(0,0,img.cols, img.rows);
+        cv::grabCut(img, mask, humanBounds.front(), bgModel, fgModel, 10, cv::GC_INIT_WITH_MASK);
+        // Write differences to mask
+        cv::compare(mask, cv::GC_PR_FGD, mask, cv::CMP_EQ);
 
-    // Subtract BG and write diff to matte
-    bg->apply(back, matte);
-    bg->apply(front, matte);
-    erode(matte, matte, cv::Mat());
-    dilate(matte, matte, cv::Mat());
-
-    // Find contours and draw onto matte
-    findContours(matte.clone(), contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_NONE);
-    cv::drawContours(matte, contours, -1, cv::Scalar(255, 255, 255), 1);
-
-    // Trim matte
-    cv::Mat boundingPoints;
-    findNonZero(matte, boundingPoints);
-    matte = cv::Mat(matte, boundingRect(boundingPoints));
-    if (matte.cols == 0 && matte.rows == 0) {
-        matte = cv::Mat(1, 1, matte.type(), cv::Scalar(0,0,0));
+        img = mask;
+        info("Extracted foreground");
     }
 
-    // Validate orientation
-    if (matte.cols > matte.rows) throw NOT_VERTICAL;
+
+    // Crop image to human bounds
+    debug("Cropping image to detected bounds");
+    img = cv::Mat(img, humanBounds.front());
+    info("Cropped image to detected bounds");
+
+    debug("Eroding & Dilating image");
+    cv::erode(img, img, cv::Mat());
+    cv::dilate(img, img, cv::Mat());
+    info("Eroded & Dilated image");
+
+    // Trim image
+    {
+        debug("Trimming image");
+        cv::Mat boundingPoints;
+        findNonZero(img, boundingPoints);
+        img = cv::Mat(img, boundingRect(boundingPoints));
+        if (img.cols == 0 && img.rows == 0) {
+            img = cv::Mat(1, 1, img.type(), cv::Scalar(0, 0, 0));
+        }
+        info("Trimmed image");
+    }
+
+    if (img.cols > img.rows) {
+        error("Silhouette not vertical");
+        throw NOT_VERTICAL;
+    }
 
     // Invert matte
-    bitwise_not(matte, matte);
+    debug("Inverting image");
+    cv::bitwise_not(img, img);
+    info("Inverted image");
 
     // Draw matte to canvas at its relative scale
-    int oRes = static_cast<int>(std::round(1. / scale * static_cast<double>(matte.rows)));
-    cv::Mat canvas(oRes, oRes, matte.type(), cv::Scalar(255, 255, 255));
-    int x = (oRes - matte.cols) / 2;
-    int y = oRes - matte.rows;
-    matte.copyTo(canvas.colRange(x, x + matte.cols).rowRange(y, y + matte.rows));
+    {
+        debug("Drawing silhouette at scale");
+        int oRes = static_cast<int>(std::round(1. / scale * static_cast<double>(img.rows)));
+        cv::Mat canvas(oRes, oRes, img.type(), cv::Scalar(255, 255, 255));
+        int x = (oRes - img.cols) / 2;
+        int y = oRes - img.rows;
+        img.copyTo(canvas.colRange(x, x + img.cols).rowRange(y, y + img.rows));
+        img = canvas;
+        info("Drawn silhouette at scale");
+    }
 
     // Resize canvas to resolution
-    cv::resize(canvas, canvas, cv::Size(resolution, resolution), 1, 1, CV_INTER_LINEAR);
+    debug("Resizing canvas to required resolution");
+    cv::resize(img, img, cv::Size(resolution, resolution), 1, 1, CV_INTER_LINEAR);
+    info("Resized canvas to required resolution");
 
-    return canvas;
+    return img;
 }
 
 int main(int argc, char **argv) {
-    // <BG_FP> <FG_FP> <OUT_FP> <HEIGHT> <MAX_HEIGHT> <RES> <THRESHOLD>
-
-    // Read front and back images
-    cv::Mat back = cv::imread(argv[1]);
-    cv::Mat front = cv::imread(argv[2]);
-
-    // Parse input values
-    int height = atoi(argv[4]);
-    int maxHeight = atoi(argv[5]);
-    int resolution = atoi(argv[6]);
-    int threshold = atoi(argv[7]);
-    if (threshold <= 0) threshold = 512;
-    double scale = static_cast<double>(height) / static_cast<double>(maxHeight);
-
-    // Extract silhouette
     cv::Mat silhouette;
     try {
-        silhouette = extractSilhouette(back, front, scale, resolution, threshold);
+        silhouette = extractSilhouette(cv::imread("../images/fg1.jpg"), cv::imread("../images/mask1.jpg", CV_8UC1), .8, 512);
+//        silhouette = extractSilhouette(cv::imread("../images/fg4.png"), cv::imread("../images/mask4.png", CV_8UC1), .8, 512);
     } catch (int errCode) {
         std::cerr << "An error occurred: ERR CODE " << errCode << std::endl;
         return errCode;
     }
 
-    // Save image
-    cv::imwrite(argv[3], silhouette);
-
-    return 0;
+    cv::namedWindow("Image", CV_WINDOW_AUTOSIZE);
+    cv::imshow("Image", silhouette);
+    cv::waitKey(0);
 }
+
+//int main(int argc, char **argv) {
+// <BG_FP> <FG_FP> <OUT_FP> <HEIGHT> <MAX_HEIGHT> <RES> <THRESHOLD>
+
+// Read front and back images
+//    cv::Mat back = cv::imread(argv[1]);
+//    cv::Mat front = cv::imread(argv[2]);
+
+// Parse input values
+//    int height = atoi(argv[4]);
+//    int maxHeight = atoi(argv[5]);
+//    int resolution = atoi(argv[6]);
+//    int threshold = atoi(argv[7]);
+//    if (threshold <= 0) threshold = 512;
+//    double scale = static_cast<double>(height) / static_cast<double>(maxHeight);
+
+// Extract silhouette
+//    cv::Mat silhouette;
+//    try {
+//        silhouette = extractSilhouette(back, front, scale, resolution, threshold);
+//    } catch (int errCode) {
+//        std::cerr << "An error occurred: ERR CODE " << errCode << std::endl;
+//        return errCode;
+//    }
+
+// Save image
+//    cv::imwrite(argv[3], silhouette);
+//
+//    return 0;
+//}
