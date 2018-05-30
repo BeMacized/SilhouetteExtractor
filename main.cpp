@@ -175,22 +175,23 @@ cv::Mat extractSilhouette(cv::Mat img, std::string maskPath, double maskAreaFact
 }
 
 int main(int argc, char **argv) {
-    // <IMG_FP> <MASK_FP> <OUT_FP> <HEIGHT> <MAX_HEIGHT> <RES>
+    // <IMG_FP> <MASK_FP> <OUT_FP> <MASK_AREA_FACTOR> <HEIGHT> <MAX_HEIGHT> <RES>
 
     // Read image
     cv::Mat img = cv::imread(argv[1]);
 
     // Parse input values
     std::string maskPath = argv[2];
-    int height = atoi(argv[4]);
-    int maxHeight = atoi(argv[5]);
-    int resolution = atoi(argv[6]);
+    double maskAreaFactor = atof(argv[4]);
+    int height = atoi(argv[5]);
+    int maxHeight = atoi(argv[6]);
+    int resolution = atoi(argv[7]);
     double scale = static_cast<double>(height) / static_cast<double>(maxHeight);
 
     // Extract silhouette
     cv::Mat silhouette;
     try {
-        silhouette = extractSilhouette(img, maskPath, .9, scale, resolution);
+        silhouette = extractSilhouette(img, maskPath, maskAreaFactor, scale, resolution);
     } catch (int errCode) {
         std::cerr << "An error occurred: ERR CODE " << errCode << std::endl;
         return errCode;
