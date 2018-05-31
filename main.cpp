@@ -68,7 +68,6 @@ cv::Mat getMask(int sourceCols, int sourceRows, std::string maskPath, double are
 }
 
 cv::Mat extractSilhouette(cv::Mat img, std::string maskPath, double maskAreaFactor, double scale, int resolution) {
-    cv::namedWindow("Image", CV_WINDOW_AUTOSIZE);
     // Validate scale
     if (scale <= 0 || scale > 1) {
         throw INVALID_SCALE;
@@ -198,6 +197,5 @@ int main(int argc, char **argv) {
 
     // Save image
     cv::imwrite(argv[3], silhouette);
-
     return 0;
 }
