@@ -4,9 +4,9 @@
 #include "nms.hpp"
 
 // ERROR CODE(S)
-const int NO_PERSON_DETECTED = 1;
-const int NOT_VERTICAL = 2;
-const int INVALID_SCALE = 3;
+const int NO_PERSON_DETECTED = 100;
+const int NOT_VERTICAL = 101;
+const int INVALID_SCALE = 102;
 
 void logdebug(std::string msg) {
     std::cout << "[DEBUG] " << msg << std::endl;
