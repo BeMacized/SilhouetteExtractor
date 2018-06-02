@@ -3,8 +3,8 @@
 #include <opencv2/opencv.hpp>
 
 // ERROR CODE(S)
-const int NOT_VERTICAL = 101;
-const int INVALID_SCALE = 102;
+const int NOT_VERTICAL = 100;
+const int INVALID_SCALE = 101;
 
 void logdebug(std::string msg) {
     std::cout << "[DEBUG] " << msg << std::endl;
@@ -52,7 +52,7 @@ cv::Mat getMask(int sourceCols, int sourceRows, std::string maskPath, double are
     cv::dilate(mask, maskPRBG, cv::Mat(), cv::Point(-1, -1), 20);
     // Produce eroded mask
     cv::Mat maskFG;
-    cv::erode(mask, maskFG, cv::Mat(), cv::Point(-1, -1), 20);
+    cv::erode(mask, maskFG, cv::Mat(), cv::Point(-1, -1), 30);
     // Create canvas with GC_BGD
     cv::Mat canvas(sourceRows, sourceCols, CV_8UC1, cv::Scalar(cv::GC_BGD));
     // Write GC_PR_BGD to mask
@@ -141,8 +141,6 @@ cv::Mat extractSilhouette(cv::Mat img, std::string maskPath, double maskAreaFact
 }
 
 int main(int argc, char **argv) {
-    // <IMG_FP> <MASK_FP> <OUT_FP> <MASK_AREA_FACTOR> <HEIGHT> <MAX_HEIGHT> <RES>
-
     // Read image
     cv::Mat img = cv::imread(argv[1]);
 
