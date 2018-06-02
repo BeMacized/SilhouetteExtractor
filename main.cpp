@@ -1,7 +1,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <opencv2/opencv.hpp>
-#include "nms.hpp"
 
 // ERROR CODE(S)
 const int NOT_VERTICAL = 101;
