@@ -4,7 +4,6 @@
 #include "nms.hpp"
 
 // ERROR CODE(S)
-const int NO_PERSON_DETECTED = 100;
 const int NOT_VERTICAL = 101;
 const int INVALID_SCALE = 102;
 
@@ -79,32 +78,6 @@ cv::Mat extractSilhouette(cv::Mat img, std::string maskPath, double maskAreaFact
     cv::resize(img, img, cv::Size(), resizeFactor, resizeFactor, cv::INTER_CUBIC);
     loginfo("Resized input image");
 
-    // Initialise person detector
-    logdebug("Detecting people in source image");
-    cv::HOGDescriptor hog;
-    hog.setSVMDetector(cv::HOGDescriptor::getDefaultPeopleDetector());
-
-    // Detect people in the front image
-    std::vector<cv::Rect> humanBounds;
-    std::vector<double> weights;
-    hog.detectMultiScale(img, humanBounds, weights, 0, cv::Size(4, 4), cv::Size(8, 8), 1.05);
-
-    // Quit if none detected
-    if (humanBounds.size() == 0) {
-        logerror("No person detected");
-        throw NO_PERSON_DETECTED;
-    }
-    loginfo("Detected person in image");
-
-    // Non-maxima suppression for merging detections
-    logdebug("Applying non-maxima suppression to detected bounds");
-    std::vector<std::vector<float>> procRects;
-    for (cv::Rect bound : humanBounds) {
-        procRects.push_back({bound.x, bound.y, bound.x + bound.width, bound.y + bound.height});
-    }
-    humanBounds = nms(procRects, 0.65);
-    loginfo("Applied non-maxima suppression to detected bounds");
-
     // Extract foreground
     {
         logdebug("Extracting foreground");
@@ -112,18 +85,14 @@ cv::Mat extractSilhouette(cv::Mat img, std::string maskPath, double maskAreaFact
         cv::Mat mask = getMask(img.cols, img.rows, maskPath, maskAreaFactor);
         // Execute grabcut
         cv::Mat bgModel, fgModel;
-        cv::grabCut(img, mask, humanBounds.front(), bgModel, fgModel, 10, cv::GC_INIT_WITH_MASK);
+        cv::Rect rect(0, 0, mask.cols, mask.rows);
+        cv::grabCut(img, mask, rect, bgModel, fgModel, 10, cv::GC_INIT_WITH_MASK);
         // Transform mask to silhouette on img
         img = cv::Mat(mask.rows, mask.cols, CV_8UC1, cv::Scalar(0));
         img.setTo(255, mask == cv::GC_PR_FGD);
         img.setTo(255, mask == cv::GC_FGD);
         loginfo("Extracted foreground");
     }
-
-    // Crop image to human bounds
-    logdebug("Cropping image to detected bounds");
-    img = cv::Mat(img, humanBounds.front());
-    loginfo("Cropped image to detected bounds");
 
     logdebug("Eroding & Dilating image");
     cv::erode(img, img, cv::Mat());
